@@ -32,5 +32,10 @@ function add(s) {
     write(json);
 }
 var a = z(process.argv);
+var bar = '';
+for (var i=0; i<a.n; i++) {
+    bar += '.';
+}
+console.log(bar);
 a.t=Date();
 add(a);
