@@ -1,3 +1,16 @@
+/*
+    > JSON.stringify(z(['node', 'margin', '50', 'random', 'words']))
+    '{"n":50,"d":"random words"}'
+*/
+function z(a) {
+    if(a[0]==='node'){
+        a.shift();
+    }
+    a.shift();
+    var r={n:Number(a.shift())};
+    r.d=a.join(' ');
+    return r;
+};
 var fs = require('fs');
 function write(json) {
     var s = JSON.stringify(json);
@@ -15,10 +28,9 @@ function add(s) {
     } catch(e) {
         json = [];
     }
-    json.push([Date(), s]);
+    json.push(s);
     write(json);
 }
-var a = process.argv;
-var n = a.shift();
-if(n==='node'){ a.shift(); }
-add(a.join());
+var a = z(process.argv);
+a.t=Date();
+add(a);
