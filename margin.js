@@ -11,14 +11,15 @@ function z(a) {
     r.d=a.join(' ');
     return r;
 };
-var fs = require('fs');
+var fs = require('fs'),
+    fileName = 'margin-data.json';
 function write(json) {
     var s = JSON.stringify(json);
-    var b = fs.openSync('file.json', 'w+');
+    var b = fs.openSync(fileName, 'w+');
     fs.writeSync(b, s);
 }
 function read() {
-    var s = fs.readFileSync('file.json')
+    var s = fs.readFileSync(fileName)
     return JSON.parse(s.toString())
 }
 function add(s) {
