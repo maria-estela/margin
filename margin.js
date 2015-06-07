@@ -1,3 +1,6 @@
+#!/usr/bin/env node
+'use strict';
+
 /*
     > JSON.stringify(z(['node', 'margin', '50', 'random', 'words']))
     '{"n":50,"d":"random words"}'

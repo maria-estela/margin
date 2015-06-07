@@ -1,0 +1,18 @@
+{
+  "name": "margin",
+  "version": "0.0.0",
+  "description": "stores numbers with a description and a timestamp",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "bin": "./margin.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/danse/margin.git"
+  },
+  "license": "WTFPL",
+  "author": "danse",
+  "bugs": {
+    "url": "https://github.com/danse/margin/issues"
+  }
+}
