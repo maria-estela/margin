@@ -1,11 +1,14 @@
 {
   "name": "margin",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "stores numbers with a description and a timestamp",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "bin": "./margin.js",
+  "bin": {
+    "margin": "./margin.js",
+    "margin-convert": "./margin-convert.js"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/danse/margin.git"
@@ -14,5 +17,8 @@
   "author": "danse",
   "bugs": {
     "url": "https://github.com/danse/margin/issues"
+  },
+  "dependencies": {
+    "pretty-data": "^0.40.0"
   }
 }

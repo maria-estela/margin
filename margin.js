@@ -15,9 +15,10 @@ function z(a) {
     return r;
 };
 var fs = require('fs'),
+    pd = require('pretty-data').pd,
     fileName = 'margin-data.json';
 function write(json) {
-    var s = JSON.stringify(json);
+    var s = pd.json(json);
     var b = fs.openSync(fileName, 'w+');
     fs.writeSync(b, s);
 }
@@ -41,5 +42,5 @@ for (var i=0; i<a.n; i++) {
     bar += '.';
 }
 console.log(bar);
-a.t=Date();
+a.t = new Date().toJSON();
 add(a);
