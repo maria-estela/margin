@@ -1,13 +1,14 @@
 {
   "name": "margin",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "stores numbers with a description and a timestamp",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "bin": {
     "margin": "./margin.js",
-    "margin-convert": "./margin-convert.js"
+    "margin-convert-date": "./margin-convert-date.js",
+    "margin-convert-1-2": "./margin-convert-1-2.js"
   },
   "repository": {
     "type": "git",
