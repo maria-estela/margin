@@ -10,8 +10,8 @@ function z(a) {
         a.shift();
     }
     a.shift();
-    var r={n:Number(a.shift())};
-    r.d=a.join(' ');
+    var r={value:Number(a.shift())};
+    r.description=a.join(' ');
     return r;
 };
 var fs = require('fs'),
@@ -42,5 +42,5 @@ for (var i=0; i<a.n; i++) {
     bar += '.';
 }
 console.log(bar);
-a.t = new Date().toJSON();
+a.time = new Date().toJSON();
 add(a);

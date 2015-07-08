@@ -1,6 +1,6 @@
 {
   "name": "margin",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "stores numbers with a description and a timestamp",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
