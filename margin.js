@@ -38,7 +38,7 @@ function add(s) {
 }
 var a = z(process.argv);
 var bar = '';
-for (var i=0; i<a.n; i++) {
+for (var i=0; i<a.value; i++) {
     bar += '.';
 }
 console.log(bar);
