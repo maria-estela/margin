@@ -45,7 +45,7 @@ addMargin newMargin maybeMargins = margins ++ [newMargin]
 
 addToDefaultFile (value, description) = do
   newMargin <- marginNow value description
-  applyToFile "./margin-data.json" (addMargin newMargin)
+  applyToFile ("./" ++ defaultFileName) (addMargin newMargin)
   return ()
 
 main = do

@@ -6,6 +6,8 @@ import Data.Aeson( FromJSON, ToJSON )
 import GHC.Generics
 import Data.Time.Clock( UTCTime )
 
+defaultFileName = "margin-data.json"
+
 data Margin = Margin {
   value :: Float,
   description :: String,
