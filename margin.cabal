@@ -2,7 +2,7 @@
 -- documentation, see http://haskell.org/cabal/users-guide/
 
 name:                margin
-version:             0.1.0.0
+version:             0.1.1.0
 -- synopsis:            
 -- description:         
 license:             PublicDomain
@@ -28,6 +28,10 @@ executable margin-add
 
 executable margin-sum
  main-is: margin-sum.hs
+ build-depends: base, aeson, bytestring, margin
+
+executable margin-merge
+ main-is: margin-merge.hs
  build-depends: base, aeson, bytestring, margin
 
 library
