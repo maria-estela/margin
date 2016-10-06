@@ -38,5 +38,5 @@ onAllMargins paths fun = do
   contents <- readMarginFiles paths
   let parsed = map (eitherDecode . pack) contents
     in if (allRights parsed)
-       then (print . fun . concat . rights) parsed
+       then (putStr . fun . concat . rights) parsed
        else print "parsing error"
