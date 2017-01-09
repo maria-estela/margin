@@ -31,12 +31,20 @@ allRights = and . areRights
 readMarginFiles :: [String] -> IO [String]
 readMarginFiles names = sequence $ map readFile names
 
+getAllMargins :: [String] -> IO [Margin]
+getAllMargins paths = do
+  contents <- readMarginFiles paths
+  let parsed = map (eitherDecode . pack) contents
+    in if (allRights parsed)
+       then
+         (return . concat . rights) parsed
+       else do
+         print "parsing error"
+         return []
+
 -- helper for command line scripts. Gets a list of paths and a
 -- function to execute on them if they are all correctly parsed as
 -- margins
 onAllMargins paths fun = do
-  contents <- readMarginFiles paths
-  let parsed = map (eitherDecode . pack) contents
-    in if (allRights parsed)
-       then (putStr . fun . concat . rights) parsed
-       else print "parsing error"
+  margins <- getAllMargins paths
+  (putStr . fun) margins
