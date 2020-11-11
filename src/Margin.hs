@@ -1,13 +1,17 @@
 {-# LANGUAGE DeriveGeneric #-}
 module Margin where
 
-import Data.Semigroup
-import Data.Aeson (FromJSON, ToJSON)
-import GHC.Generics
-import Data.Time.Clock (UTCTime)
-import Data.Either (rights, lefts)
 import Data.Aeson (eitherDecode)
-import Data.ByteString.Lazy (readFile)
+import Data.Aeson( FromJSON, ToJSON, eitherDecode, encode )
+import Data.ByteString.Lazy( readFile, writeFile )
+import Data.Either (rights, lefts)
+import Data.Functor( (<$>) )
+import Data.Maybe( fromMaybe )
+import Data.Semigroup
+import Data.Time.Clock (UTCTime)
+import Data.Time( getCurrentTime )
+import GHC.Generics
+import System.Directory( doesFileExist )
 
 defaultFileName = "margin-data.json"
 
@@ -37,3 +41,34 @@ getAllMargins paths = do
 onAllMargins paths fun = do
   margins <- getAllMargins paths
   (putStr . fun) margins
+
+marginNow :: Float -> String -> IO Margin
+marginNow value description = (Margin value description) <$> getCurrentTime
+
+applyToFile :: (FromJSON a, ToJSON a) => FilePath -> (Maybe a -> a) -> IO (Either String a)
+applyToFile path f = do
+  exists <- doesFileExist path
+  if exists
+    then
+    do
+      string <- Data.ByteString.Lazy.readFile path
+      case (eitherDecode string) of
+        Left error -> return (Left error)
+        Right decoded -> do
+          Data.ByteString.Lazy.writeFile path (encode processed)
+          return (Right processed)
+            where processed = f (Just decoded)
+    else
+    do
+      Data.ByteString.Lazy.writeFile path (encode processed)
+      return (Right processed)
+        where processed = f Nothing
+
+addMargin :: Margin -> Maybe [Margin] -> [Margin]
+addMargin newMargin maybeMargins = margins ++ [newMargin]
+  where margins = fromMaybe [] maybeMargins
+
+addToDefaultFile (value, description) = do
+  newMargin <- marginNow value description
+  applyToFile ("./" ++ defaultFileName) (addMargin newMargin)
+  return ()
