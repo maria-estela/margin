@@ -2,6 +2,7 @@ import Data.ByteString.Lazy( readFile )
 import Margin( value, defaultFileName, Margin )
 import Data.Aeson( eitherDecode )
 import Control.Applicative( (<$>) )
+import Control.Monad( void )
 import System.Environment( getArgs )
 
 analyse :: [Margin] -> (Float, Float)
@@ -19,6 +20,6 @@ showStats fileName = do
 
 main = do
   args <- getArgs
-  if (length args == 1)
-    then (showStats (head args))
-    else showStats defaultFileName
+  if (null args)
+    then showStats defaultFileName
+    else void (sequence (map showStats args))
