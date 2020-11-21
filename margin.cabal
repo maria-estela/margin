@@ -18,7 +18,6 @@ cabal-version:       >=1.10
 executable margin-add
  main-is: margin-add.hs
  build-depends:       base,
-                      datetime-sb,
                       time,
                       aeson,
                       bytestring,
@@ -28,12 +27,13 @@ executable margin-add
 executable margin-tracker
  main-is: margin-tracker.hs
  build-depends:       base,
-                      datetime-sb,
                       unix,
                       aeson,
                       bytestring,
                       optparse-applicative,
-                      margin
+                      containers,
+                      margin,
+                      safe
 
 executable margin-stats
  main-is: margin-stats.hs
