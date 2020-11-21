@@ -43,10 +43,6 @@ executable margin-merge
  main-is: margin-merge.hs
  build-depends: base, aeson, bytestring, margin
 
-executable margin-test-parsing
- main-is: margin-test-parsing.hs
- build-depends: base, margin
-
 library
   exposed-modules:     Margin
   -- other-modules:       
