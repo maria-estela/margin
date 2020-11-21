@@ -4,42 +4,50 @@ import System.Posix.Types
 import System.Environment (getArgs)
 import Control.Monad (forever, void, join)
 import Text.Printf (printf)
-import Text.Read (readEither)
+import Text.Read (readMaybe)
+import Safe (atMay)
 import Data.List (partition)
+import Data.Set (Set (..), fromList, singleton, toList, elemAt, union)
+import Control.Monad (when)
 
-enumerate :: [a] -> [(Int, a)]
-enumerate = zip [0..]
+enumerate :: Set a -> [(Int, a)]
+enumerate = zip [0..] . toList
+
+data Conf = Conf { confItems::(Set String), confComplementar::Bool }
+type Description = String
 
 track items = do
   t1 <- epochTime
   l <- getLine
   t2 <- epochTime
-  pure (items, t1, t2, l)
+  return (toMargin items (t1, t2, l))
  
-confirmation :: String -> (Float, String) -> IO ()
-confirmation action (i, p)
-  | i >= 1    = printf "%s %f hours for \"%s\"\n"   action i p
-  | otherwise = printf "%s %f minutes for \"%s\"\n" action m p
-  where m = i*60
-
--- throws exceptionsm
-toMargin :: ([String], EpochTime, EpochTime, String) -> (Float, String)
-toMargin (items, t1, t2, l) =
-  let at = (!!)
-      e = readEither l :: Either String Int
-      p = either (const l) (at items) e
+toMargin :: Set String -> (EpochTime, EpochTime, String) -> (Float, String)
+toMargin items (t1, t2, l) =
+  let m :: Maybe String
+      m = do
+        i <- readMaybe l
+        atMay (toList items) i
+      p :: String
+      p = maybe l id m
       c = fromIntegral.fromEnum
       secondsPerHour = 3600
       interval = (c t2 - c t1) / secondsPerHour
   in (interval, p)
 
+printInterval :: Float -> IO ()
+printInterval h
+  | h >= 1    = printf "%f hours\n"   h
+  | otherwise = printf "%f minutes\n" m
+  where m = h*60
+
 readConf = do
   args <- getArgs
   contents <- readFile (def args)
-  pure (lines contents, complementar args)
+  pure (Conf (items contents) (complementar args))
     where def args
             | null (fils args) = if (complementar args)
-                                  then "complementar-activities"
+                                  then "interruptions"
                                   else "activities"
             | otherwise        = head (fils args)
           optionsAndFiles :: [String] -> ([String], [String])
@@ -47,32 +55,29 @@ readConf = do
           opts = fst . optionsAndFiles
           fils = snd . optionsAndFiles
           complementar :: [String] -> Bool
-          complementar args = not (null (opts args)) 
+          complementar args = not (null (opts args))
+          items = fromList . lines
 
-step :: ([String], Bool) -> Bool -> IO Bool
-step (items, complementar) logging = do
-  case (complementar, logging) of
-    (False, True) -> (do
-              (print.enumerate) items
-              m <- track items
-              addToDefaultFile (toMargin m)
-              confirmation "added" (toMargin m))
-    (False, False) -> (do
-              putStrLn "enter to keep logging"
-              m <- track []
-              confirmation "elapsed" (toMargin m))
-    (True, False) -> (do
-              (print.enumerate) items
-              m <- track items
-              confirmation "elapsed" (toMargin m))
-    (True, True) -> (do
-              putStrLn "enter to stop logging"
-              m <- track []
-              addToDefaultFile (toMargin m)
-              confirmation "added" (toMargin m))
-  return (not logging) -- currently ignored
+step :: Conf -> Bool -> IO Bool
+step conf@(Conf items complementar) logging = do
+  putStrLn (if active
+    then show (enumerate items)
+    else if complementar
+         then "enter to select an interruption"
+         else "enter to select an activity")
+  (t, d) <- track items
+  when logging (do
+    addToDefaultFile (t,d)
+    putStrLn ("added "++d++" to default margin file"))
+  printInterval t
+  let newConf = if active then addItem d else conf
+    in step newConf (not logging)
+  where active = logging /= complementar
+        addItem description = conf {
+          confItems = union (singleton description) items
+          }
 
 main = do
-  conf <- readConf
-  forever (void (sequence (map (step conf) (join (repeat [True, False])))))
+  c <- readConf
+  forever (step c True)
  
