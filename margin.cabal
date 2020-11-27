@@ -35,6 +35,17 @@ executable margin-tracker
                       margin,
                       safe
 
+executable margin-tracker-contextual
+ main-is: margin-tracker-contextual.hs
+ build-depends:       base,
+                      unix,
+                      aeson,
+                      bytestring,
+                      optparse-applicative,
+                      containers,
+                      margin,
+                      safe
+
 executable margin-stats
  main-is: margin-stats.hs
  build-depends: base, aeson, bytestring, margin
