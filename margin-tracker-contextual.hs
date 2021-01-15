@@ -20,6 +20,8 @@ import Data.Set (
   toList,
   difference,
   union)
+import Options.Applicative
+import Data.Semigroup ((<>))
 
 enumerate :: Set a -> [(Int, a)]
 enumerate = zip [0..] . toList
@@ -82,20 +84,23 @@ updateState (Deepen userLine) state@(State items context Prompt) =
     stateItems = difference items (fromList (words selection))
     }
 
-step :: State -> IO ()
+type MarginData = (Float, String)
+
+step :: State -> IO [MarginData]
+
 step state@(State _ context Prompt) = do
   printMessage (Enumerate state)
   userLine <- try getLine
   let command = interpretCommand userLine
   if command == Quit && null context
-    then return ()
+    then return []
     else step (updateState command state)
 
 step state@(State _ context Logging) = do
   eitherInterval <- track
   either onTrackingError onInterval eitherInterval
-  step state { stateStep = Prompt }
-  where description = intercalate " " (reverse context)
+  where nextStep = step state { stateStep = Prompt }
+        description = intercalate " " (reverse context)
         track :: IO (Either IOError (EpochTime, EpochTime))
         track = do
           printMessage (Started description)
@@ -103,41 +108,51 @@ step state@(State _ context Logging) = do
           eitherEnter <- try getLine
           t2 <- epochTime
           return (fmap (const (t1, t2)) eitherEnter)
-        onInterval :: (EpochTime, EpochTime) -> IO ()
+        onInterval :: (EpochTime, EpochTime) -> IO [MarginData]
         onInterval interval =
           let hours = floatFromInterval interval
           in do
-            store hours
             printMessage (Elapsed hours)
-        onTrackingError :: IOError -> IO ()
+            nextData <- nextStep
+            pure ((hours, description) : nextData)
+        onTrackingError :: IOError -> IO [MarginData]
         onTrackingError _ = do
           printMessage CancelTracking
+          nextStep
         floatFromInterval :: (EpochTime, EpochTime) -> Float
         floatFromInterval (t1, t2) =
           let convert = fromIntegral . fromEnum
               secondsPerHour = 3600
           in (convert t2 - convert t1) / secondsPerHour
-        store hours = do
-          addToDefaultFile (hours, description)
-          printMessage (Added description)
 
-parseArgs :: [String] -> [FilePath]
-parseArgs args = paths
-  where
-    paths
-      | null fils = ["margin-tracker-activities"]
-      | otherwise = fils
-    (_, fils) = partition (\a-> head a == '-') args
+defActivities :: [FilePath] -> [FilePath]
+defActivities [] = ["margin-tracker-activities"]
+defActivities o  = o
 
 makeItems :: Either IOError [String] -> Set String
 makeItems = fromList . either (const []) parseContents 
   where parseContents cont = join (map lines cont)
 
+data Options = Options {
+  optActivities :: [String],
+  optMargin :: Maybe String
+  }
+
+options :: Parser Options
+options = Options
+          <$> many (strOption (long "activities"))
+          <*> optional (strOption (long "margin-data"))
+
+addAction :: Maybe FilePath -> ((Float, String) -> IO ())
+addAction Nothing = addToDefaultFile
+addAction (Just path) = addToFile path
+
 main :: IO ()
 main = do
-  args <- getArgs
-  let paths = parseArgs args
+  opts <- execParser (info options fullDesc)
+  let paths = defActivities (optActivities opts)
       readItems = sequence (map readFile paths)
     in (do
       contents <- try readItems
-      step (State (makeItems contents) [] Prompt))
+      trackingData <- step (State (makeItems contents) [] Prompt)
+      mapM_ (addAction (optMargin opts)) trackingData)

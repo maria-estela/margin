@@ -68,7 +68,9 @@ addMargin :: Margin -> Maybe [Margin] -> [Margin]
 addMargin newMargin maybeMargins = margins ++ [newMargin]
   where margins = fromMaybe [] maybeMargins
 
-addToDefaultFile (value, description) = do
+addToFile fileName (value, description) = do
   newMargin <- marginNow value description
-  applyToFile ("./" ++ defaultFileName) (addMargin newMargin)
+  applyToFile fileName (addMargin newMargin)
   return ()
+
+addToDefaultFile = addToFile ("./" ++ defaultFileName)
