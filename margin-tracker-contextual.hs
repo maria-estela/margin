@@ -143,10 +143,6 @@ options = Options
           <$> many (strOption (long "activities"))
           <*> optional (strOption (long "margin-data"))
 
-addAction :: Maybe FilePath -> ((Float, String) -> IO ())
-addAction Nothing = addToDefaultFile
-addAction (Just path) = addToFile path
-
 main :: IO ()
 main = do
   opts <- execParser (info options fullDesc)
@@ -155,4 +151,4 @@ main = do
     in (do
       contents <- try readItems
       trackingData <- step (State (makeItems contents) [] Prompt)
-      mapM_ (addAction (optMargin opts)) trackingData)
+      mapM_ (addToMaybeFile (optMargin opts)) trackingData)

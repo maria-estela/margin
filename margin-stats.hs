@@ -15,11 +15,11 @@ format (s, a) = "sum: " ++ (show s) ++ ", average: " ++ (show a)
 
 showStats fileName = do
   putStrLn ("reading file " ++ fileName)
-  eitherDecoded <- eitherDecode <$> Data.ByteString.Lazy.readFile ("./" ++ fileName)
+  eitherDecoded <- eitherDecode <$> Data.ByteString.Lazy.readFile fileName
   putStrLn $ either id (format . analyse) eitherDecoded
 
 main = do
   args <- getArgs
   if (null args)
-    then showStats defaultFileName
+    then showStats ("./" <> defaultFileName)
     else void (sequence (map showStats args))

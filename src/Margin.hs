@@ -74,3 +74,8 @@ addToFile fileName (value, description) = do
   return ()
 
 addToDefaultFile = addToFile ("./" ++ defaultFileName)
+
+addToMaybeFile :: Maybe FilePath -> (Float, String) -> IO ()
+addToMaybeFile Nothing = addToDefaultFile
+addToMaybeFile (Just path) = addToFile path
+
