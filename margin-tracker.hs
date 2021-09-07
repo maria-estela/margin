@@ -1,43 +1,53 @@
-{-
+{-# LANGUAGE RecordWildCards #-}
 
-Enter submits, Ctrl-D (or Ctrl-C) cancels
-
--}
 import Margin
 import System.Posix.Time
 import System.Posix.Types
 import System.Environment (getArgs)
-import Control.Monad (forever, void, join, when)
-import System.IO.Error
+import Control.Monad (join, sequence, when)
+import System.IO.Error ()
 import Control.Exception (try)
-import Text.Printf (printf)
 import Text.Read (readMaybe)
 import Safe (atMay)
-import Data.List (partition)
-import Data.Set (Set (..), fromList, singleton, empty, toList, elemAt, union)
+import Data.List (partition, intercalate, sortOn, nub)
+import Data.Maybe (fromMaybe)
+import Data.Set (
+  Set (..),
+  fromList,
+  singleton,
+  toList,
+  difference,
+  union)
+import Options.Applicative
+import Data.Semigroup ((<>))
 
-enumerate :: Set a -> [(Int, a)]
-enumerate = zip [0..] . toList
+selectionList :: Set String -> [String]
+selectionList = sortOn length . toList
+
+enumerate :: Set String -> [(Int, String)]
+enumerate = zip [0..] . selectionList
+
+data StepState = Logging | Prompt
 
 data State = State {
-  stateItems        :: Set String,
-  stateComplementar :: Bool,
-  stateLogging      :: Bool
+  stateItems   :: Set String,
+  stateContext :: [String],
+  stateStep :: StepState
   }
 
-data Message = Enumerate (Set String)
-             | Enter Bool
+data Message = Enumerate State
+             | Paused
              | Added String
              | Elapsed Float
              | Started String
              | CancelTracking
-             | CancelStep
+             | QuitMessage
 
 showMessage :: Message -> String
-showMessage (Enumerate items) = show (enumerate items)
-showMessage (Enter complementar)
-  | complementar = "enter to select an interruption"
-  | otherwise    = "enter to select an activity"
+showMessage (Enumerate state) = show (enumerate (stateItems state))
+                                ++ "\n"
+                                ++ intercalate " > " (reverse (stateContext state))
+showMessage (Paused) = "paused. enter to select an activity"
 showMessage (Added description) = "added "++description++" to margin file"
 showMessage (Elapsed h)
   | h >= 1    = (show h)++" hours"
@@ -45,95 +55,130 @@ showMessage (Elapsed h)
   where m = h*60
 showMessage (Started activity) = "started logging "++activity
 showMessage CancelTracking = "tracking discarded"
-showMessage CancelStep     = "quitting..."
+showMessage QuitMessage     = "quitting context"
 
 printMessage :: Message -> IO ()
 printMessage = putStrLn . showMessage
 
-active :: State -> Bool
-active s = stateLogging s /= stateComplementar s
+data Command = Quit | Deepen String | Continue deriving Eq
 
-step :: State -> IO (Maybe State)
-step state@(State items complementar logging) =
-  let track :: String -> IO (Either IOError (EpochTime, EpochTime))
-      track activity = do
-        printMessage (Started activity)
-        t1 <- epochTime
-        eitherEnter <- try getLine
-        t2 <- epochTime
-        return (fmap (const (t1, t2)) eitherEnter)
-      selected :: String -> Maybe String
-      selected userLine = readMaybe userLine >>= atMay (toList items)
-      floatFromInterval :: (EpochTime, EpochTime) -> Float
-      floatFromInterval (t1, t2) =
-        let convert = fromIntegral . fromEnum
-            secondsPerHour = 3600
-        in (convert t2 - convert t1) / secondsPerHour
-      store description hours = do
-        addToDefaultFile (hours, description)
-        printMessage (Added description)
-      onInterval :: String -> (EpochTime, EpochTime) -> IO ()
-      onInterval description interval =
-        let hours = floatFromInterval interval
-        in do
-          when (stateLogging state) (store description hours)
-          printMessage (Elapsed hours)
-      onError :: IOError -> IO (Maybe State)
-      onError _ = do
-        printMessage CancelStep
-        return Nothing
-      onTrackingError :: IOError -> IO ()
-      onTrackingError _ = do
-        printMessage CancelTracking
-      onUser :: String -> IO (Maybe State)
-      onUser userLine = 
-        let description = maybe userLine id (selected userLine)
-            addItems newItems = union newItems (stateItems state)
-            newItems = if active state then singleton description else empty
-            newState = state {
-              stateItems = addItems (newItems),
-              stateLogging = not (stateLogging state) }
-        in do
-          eitherInterval <- track description
-          either onTrackingError (onInterval description) eitherInterval
-          step newState
-  in if (active state)
-     then (do
-               printMessage (Enumerate items)
-               eitherUser <- try getLine
-               either onError onUser eitherUser)
-     else (do
-               printMessage (Enter complementar)
-               eitherInterval <- track "complementar"
-               either onTrackingError (onInterval "complementar") eitherInterval
-               step (state { stateLogging = not logging }))
+interpretCommand :: Either IOError String -> Command
+interpretCommand (Left _)   = Quit
+interpretCommand (Right "") = Continue
+interpretCommand (Right s)  = Deepen s
 
-parseArgs :: [String] -> ([FilePath], Bool)
-parseArgs args = (paths, complementar)
+-- @updateState@ is used only on @Prompt@ states
+updateState :: Command -> State -> State
+updateState Quit state@(State items context Prompt) =
+  state {
+    stateContext = tail context,
+    stateItems = union items (fromList (words (head context)))
+    }
+updateState Continue state = state { stateStep = Logging }
+updateState (Deepen userLine) state@(State items context Prompt) =
+  let
+    selected :: Maybe String
+    selected = readMaybe userLine >>= atMay (selectionList items)
+    selection = maybe userLine id selected
+  in state {
+    stateContext = selection:context,
+    stateItems = difference items (fromList (words selection))
+    }
+
+type MarginData = (Float, String)
+
+step :: State -> IO [MarginData]
+
+step state@(State _ context Prompt) = do
+  printMessage (Enumerate state)
+  userLine <- try getLine
+  let command = interpretCommand userLine
+  if command == Quit && null context
+    then return []
+    else step (updateState command state)
+
+step state@(State _ context Logging) = do
+  eitherInterval <- track
+  either onTrackingError onInterval eitherInterval
+  where nextStep = step state { stateStep = Prompt }
+        description = intercalate " " (reverse context)
+        track :: IO (Either IOError (EpochTime, EpochTime))
+        track = do
+          printMessage (Started description)
+          t1 <- epochTime
+          eitherEnter <- try getLine
+          t2 <- epochTime
+          return (fmap (const (t1, t2)) eitherEnter)
+        onInterval :: (EpochTime, EpochTime) -> IO [MarginData]
+        onInterval interval =
+          let hours = floatFromInterval interval
+          in do
+            printMessage (Elapsed hours)
+            nextData <- nextStep
+            pure ((hours, description) : nextData)
+        onTrackingError :: IOError -> IO [MarginData]
+        onTrackingError _ = do
+          printMessage CancelTracking
+          nextStep
+        floatFromInterval :: (EpochTime, EpochTime) -> Float
+        floatFromInterval (t1, t2) =
+          let convert = fromIntegral . fromEnum
+              secondsPerHour = 3600
+          in (convert t2 - convert t1) / secondsPerHour
+
+defActivities :: [FilePath] -> [FilePath]
+defActivities [] = ["margin-tracker-activities"]
+defActivities o  = o
+
+makeItems
+  :: Either IOError [String]
+  -> Set String
+  -> Set String
+makeItems eitherContents marginSet =
+  union contentSet marginSet
   where
-    paths
-      | null fils = if complementar
-                    then ["interruptions"]
-                    else ["activities"]
-      | otherwise = fils
-    opts, fils :: [String]
-    (opts, fils) = partition (=="-c") args
-    complementar = not (null opts)
+    contentSet = fromList $ either (const []) parseContents eitherContents
+    parseContents cont = join $ lines <$> cont
 
-makeItems :: Either IOError [String] -> Set String
-makeItems = fromList . either (const []) parseContents 
-  where parseContents cont = join (map lines cont)
+data Options = Options {
+  activityFiles :: [String],
+  marginFile :: Maybe String,
+  marginDescriptionLimit :: Maybe Int,
+  verbose :: Bool
+  }
 
-loop :: Monad m => (a -> m (Maybe a)) -> a -> m ()
-loop f i = do
-  i' <- f i
-  maybe (return ()) (loop f) i'
+options :: Parser Options
+options = Options
+          <$> many (strOption (long "activities"))
+          <*> optional (strOption (long "margin-data"))
+          <*> optional (option auto (long "margin-description-limit"))
+          <*> switch (long "verbose")
 
+main :: IO ()
 main = do
-  args <- getArgs
-  let (paths, complementar) = parseArgs args
-      readItems = sequence (map readFile paths)
-    in (do
-      contents <- try readItems
-      let initial = State (makeItems contents) complementar True
-        in loop step initial)
+  Options{..} <- execParser (info options fullDesc)
+  eitherEitherMargin <- try $ parseMaybeFile marginFile
+  eitherMargin <- case eitherEitherMargin of
+    Left error -> do
+      print (error :: IOError)
+      putStrLn "no activities will be taken by the file"
+      pure $ Right []
+    Right e -> pure e
+  let paths = defActivities activityFiles
+      margin = either (const []) id eitherMargin
+      marginSet = fromList $ takeMargins
+      takeMargins = take (fromMaybe 10 marginDescriptionLimit) $ parseMargins
+      parseMargins =
+        sortOn length
+        $ nub
+        $ join
+        $ words . description
+        <$> margin
+      showMargins = do
+        putStrLn $ "parsed: " <> (show parseMargins)
+        putStrLn $ "taking: " <> (show takeMargins)
+  when verbose showMargins
+  eitherContents <- try $ sequence $ map readFile paths
+  let activities = makeItems eitherContents marginSet
+  trackingData <- step (State activities [] Prompt)
+  mapM_ (addToMaybeFile marginFile) trackingData

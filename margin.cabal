@@ -24,8 +24,8 @@ executable margin-add
                       optparse-applicative,
                       margin
 
-executable margin-tracker
- main-is: margin-tracker.hs
+executable margin-tracker-complementar
+ main-is: margin-tracker-complementar.hs
  build-depends:       base,
                       unix,
                       aeson,
@@ -35,8 +35,8 @@ executable margin-tracker
                       margin,
                       safe
 
-executable margin-tracker-contextual
- main-is: margin-tracker-contextual.hs
+executable margin-tracker
+ main-is: margin-tracker.hs
  build-depends:       base,
                       unix,
                       aeson,
