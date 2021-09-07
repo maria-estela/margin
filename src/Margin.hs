@@ -79,3 +79,4 @@ addToMaybeFile :: Maybe FilePath -> (Float, String) -> IO ()
 addToMaybeFile Nothing = addToDefaultFile
 addToMaybeFile (Just path) = addToFile path
 
+parseMaybeFile = parseMarginFile . fromMaybe defaultFileName
