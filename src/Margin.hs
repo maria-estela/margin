@@ -1,8 +1,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 module Margin where
 
-import Data.Aeson (eitherDecode)
-import Data.Aeson( FromJSON, ToJSON, eitherDecode, encode )
+import Data.Aeson(eitherDecode, FromJSON, ToJSON, eitherDecode, encode )
 import Data.ByteString.Lazy( readFile, writeFile )
 import Data.Either (rights, lefts)
 import Data.Functor( (<$>) )
@@ -27,13 +26,13 @@ instance ToJSON Margin
 parseMarginFile :: String -> IO (Either String [Margin])
 parseMarginFile path = do
   contents <- Data.ByteString.Lazy.readFile path
-  return (eitherDecode contents)
+  pure (eitherDecode contents)
 
 getAllMargins :: [String] -> IO [Margin]
 getAllMargins paths = do
-  eitherDecoded <- sequence (map parseMarginFile paths)
-  sequence ((map print . lefts) eitherDecoded)
-  return ((concat . rights) eitherDecoded)
+  eitherDecoded <- mapM parseMarginFile paths
+  mapM print (lefts eitherDecoded)
+  pure ((concat . rights) eitherDecoded)
 
 -- helper for command line scripts. Gets a list of paths and a
 -- function to execute on them if they are all correctly parsed as
@@ -43,7 +42,7 @@ onAllMargins paths fun = do
   (putStr . fun) margins
 
 marginNow :: Float -> String -> IO Margin
-marginNow value description = (Margin value description) <$> getCurrentTime
+marginNow value description = Margin value description <$> getCurrentTime
 
 applyToFile :: (FromJSON a, ToJSON a) => FilePath -> (Maybe a -> a) -> IO (Either String a)
 applyToFile path f = do
@@ -52,16 +51,16 @@ applyToFile path f = do
     then
     do
       string <- Data.ByteString.Lazy.readFile path
-      case (eitherDecode string) of
-        Left error -> return (Left error)
+      case eitherDecode string of
+        Left error -> pure (Left error)
         Right decoded -> do
           Data.ByteString.Lazy.writeFile path (encode processed)
-          return (Right processed)
+          pure (Right processed)
             where processed = f (Just decoded)
     else
     do
       Data.ByteString.Lazy.writeFile path (encode processed)
-      return (Right processed)
+      pure (Right processed)
         where processed = f Nothing
 
 addMargin :: Margin -> Maybe [Margin] -> [Margin]
@@ -71,7 +70,7 @@ addMargin newMargin maybeMargins = margins ++ [newMargin]
 addToFile fileName (value, description) = do
   newMargin <- marginNow value description
   applyToFile fileName (addMargin newMargin)
-  return ()
+  pure ()
 
 addToDefaultFile = addToFile ("./" ++ defaultFileName)
 
