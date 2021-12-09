@@ -2,7 +2,7 @@
 -- documentation, see http://haskell.org/cabal/users-guide/
 
 name:                margin
-version:             0.3.1.1
+version:             0.4.0.0
 -- synopsis:            
 -- description:         
 license:             PublicDomain
@@ -20,6 +20,9 @@ executable margin-add
  build-depends:       base,
                       time,
                       aeson,
+                      cassava,
+                      iso8601-time,
+                      vector,
                       bytestring,
                       optparse-applicative,
                       margin
@@ -29,6 +32,9 @@ executable margin-tracker-complementar
  build-depends:       base,
                       unix,
                       aeson,
+                      cassava,
+                      iso8601-time,
+                      vector,
                       bytestring,
                       optparse-applicative,
                       containers,
@@ -40,6 +46,9 @@ executable margin-tracker
  build-depends:       base,
                       unix,
                       aeson,
+                      cassava,
+                      iso8601-time,
+                      vector,
                       bytestring,
                       optparse-applicative,
                       containers,
@@ -48,11 +57,23 @@ executable margin-tracker
 
 executable margin-stats
  main-is: margin-stats.hs
- build-depends: base, aeson, bytestring, margin
+ build-depends: base,
+                aeson,
+                cassava,
+                vector,
+                iso8601-time,
+                bytestring,
+                margin
 
 executable margin-merge
  main-is: margin-merge.hs
- build-depends: base, aeson, bytestring, margin
+ build-depends: base,
+                aeson,
+                cassava,
+                vector,
+                iso8601-time,
+                bytestring,
+                margin
 
 library
   exposed-modules:     Margin
@@ -61,6 +82,9 @@ library
   build-depends:       base,
                        semigroups,
                        aeson,
+                       cassava,
+                       iso8601-time,
+                       vector,
                        time,
                        bytestring,
                        directory
