@@ -124,7 +124,7 @@ step state@(State _ context Logging) = do
         floatFromInterval (t1, t2) =
           let convert = fromIntegral . fromEnum
               secondsPerHour = 3600
-          in (convert t2 - convert t1) / secondsPerHour
+          in (convert (t2 - t1)) / secondsPerHour
 
 defActivities :: [FilePath] -> [FilePath]
 defActivities [] = ["margin-tracker-activities"]
