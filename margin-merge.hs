@@ -1,23 +1,20 @@
-import Data.ByteString.Lazy hiding (map, null)
+import Data.ByteString.Lazy hiding (map, null, concat)
 import Margin
-import Data.Aeson( eitherDecode, encode )
 import System.Environment( getArgs )
---import Control.Applicative( (<$>) )
-import Control.Monad( sequence )
 import Data.Either( partitionEithers )
 import System.IO( stderr, hPutStrLn )
 
-maybeDecodeAll :: [ByteString] -> Either [String] [[Margin]]
-maybeDecodeAll contents
+p :: [Either a b] -> Either [a] [b]
+p eithers
   | null l = Right r
   | otherwise = Left l
-  where (l, r) = partitionEithers (map eitherDecode contents)
+  where (l, r) = partitionEithers eithers
 
 main = do
   args <- getArgs
-  contents <- sequence (map Data.ByteString.Lazy.readFile args)
-  case maybeDecodeAll contents of
+  eitherDecoded <- mapM parseMarginFile args
+  case p eitherDecoded of
     Left errors -> do
-      sequence (map (hPutStrLn stderr) errors)
-      return ()
-    Right decoded -> (Data.ByteString.Lazy.putStr . encode . mconcat) decoded
+      mapM_ (hPutStrLn stderr) errors
+    Right margins ->
+      (Data.ByteString.Lazy.putStr . formatMarginContents . concat) margins

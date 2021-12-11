@@ -19,6 +19,7 @@ import qualified Data.Csv as Csv
 import qualified Data.Vector as Vector
 import qualified Data.Time.ISO8601 as ISO8601
 import qualified Data.ByteString.Char8 as Char8
+import qualified Data.ByteString.Lazy as ByteString
 
 defaultFileName = "margin-data.json"
 
@@ -67,9 +68,12 @@ parseMarginFile path = do
       when (isRight eitherDecoded) (putStrLn "this JSON margin format is deprecated")
       pure eitherDecoded
 
-serialiseMarginFile :: [Margin] -> FilePath -> IO ()
-serialiseMarginFile margins path =
-  Data.ByteString.Lazy.writeFile path (Csv.encodeDefaultOrderedByName margins)
+formatMarginContents :: [Margin] -> ByteString.ByteString
+formatMarginContents = Csv.encodeDefaultOrderedByName
+
+formatMarginFile :: [Margin] -> FilePath -> IO ()
+formatMarginFile margins path =
+  Data.ByteString.Lazy.writeFile path $ formatMarginContents margins
 
 getAllMargins :: [String] -> IO [Margin]
 getAllMargins paths = do
@@ -100,12 +104,12 @@ applyToMargin path f = do
       case eitherParsed of
         Left error -> pure (Left error)
         Right decoded -> do
-          serialiseMarginFile processed path
+          formatMarginFile processed path
           pure (Right processed)
             where processed = f (Just decoded)
     else
     do
-      serialiseMarginFile processed path
+      formatMarginFile processed path
       pure (Right processed)
         where processed = f Nothing
 
