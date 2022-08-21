@@ -158,27 +158,27 @@ main :: IO ()
 main = do
   Options{..} <- execParser (info options fullDesc)
   eitherEitherMargin <- try $ parseMaybeFile marginFile
-  eitherMargin <- case eitherEitherMargin of
-    Left error -> do
+  eitherMargin <- either explainParsing pure eitherEitherMargin
+  let parsed = parseMargins $ either (const []) id eitherMargin
+      taken = take (fromMaybe 10 marginDescriptionLimit) parsed
+  when verbose (showMargins parsed taken)
+  let paths = defActivities activityFiles
+  eitherContents <- try $ sequence $ map readFile paths
+  let activities = makeItems eitherContents $ fromList taken
+  trackingData <- step (State activities [] Prompt)
+  mapM_ (addToMaybeFile marginFile) trackingData
+
+  where
+    explainParsing error = do
       print (error :: IOError)
       putStrLn "no activities will be taken by the file"
       pure $ Right []
-    Right e -> pure e
-  let paths = defActivities activityFiles
-      margin = either (const []) id eitherMargin
-      marginSet = fromList $ takeMargins
-      takeMargins = take (fromMaybe 10 marginDescriptionLimit) $ parseMargins
-      parseMargins =
-        sortOn length
-        $ nub
-        $ join
-        $ words . description
-        <$> margin
-      showMargins = do
-        putStrLn $ "parsed: " <> (show parseMargins)
-        putStrLn $ "taking: " <> (show takeMargins)
-  when verbose showMargins
-  eitherContents <- try $ sequence $ map readFile paths
-  let activities = makeItems eitherContents marginSet
-  trackingData <- step (State activities [] Prompt)
-  mapM_ (addToMaybeFile marginFile) trackingData
+    parseMargins margin =
+      sortOn length
+      $ nub
+      $ join
+      $ words . description
+      <$> margin
+    showMargins parsed taken = do
+      putStrLn $ "parsed: " <> (show parsed)
+      putStrLn $ "taken:  " <> (show taken)
