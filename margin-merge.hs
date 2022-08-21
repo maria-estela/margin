@@ -14,7 +14,7 @@ main = do
   args <- getArgs
   eitherDecoded <- mapM parseMarginFile args
   case p eitherDecoded of
-    Left errors -> do
+    Left errors ->
       mapM_ (hPutStrLn stderr) errors
     Right margins ->
       (Data.ByteString.Lazy.putStr . formatMarginContents . concat) margins

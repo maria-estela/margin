@@ -20,7 +20,7 @@ options = Options
 
 defDesc :: Options -> (Float, String)
 defDesc o =
-  let d = maybe "" id (optDes o)
+  let d = fromMaybe "" (optDes o)
   in (optVal o, d)
 
 main = do

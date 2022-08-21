@@ -47,11 +47,11 @@ showMessage :: Message -> String
 showMessage (Enumerate state) = show (enumerate (stateItems state))
                                 ++ "\n"
                                 ++ intercalate " > " (reverse (stateContext state))
-showMessage (Paused) = "paused. enter to select an activity"
+showMessage Paused = "paused. enter to select an activity"
 showMessage (Added description) = "added "++description++" to margin file"
 showMessage (Elapsed h)
-  | h >= 1    = (show h)++" hours"
-  | otherwise = (show m)++" minutes"
+  | h >= 1    = show h <> " hours"
+  | otherwise = show m <> " minutes"
   where m = h*60
 showMessage (Started activity) = "started logging "++activity
 showMessage CancelTracking = "tracking discarded"
@@ -72,14 +72,14 @@ updateState :: Command -> State -> State
 updateState Quit state@(State items context Prompt) =
   state {
     stateContext = tail context,
-    stateItems = union items (fromList (words (head context)))
+    stateItems = items `union` fromList (words (head context))
     }
 updateState Continue state = state { stateStep = Logging }
 updateState (Deepen userLine) state@(State items context Prompt) =
   let
     selected :: Maybe String
     selected = readMaybe userLine >>= atMay (selectionList items)
-    selection = maybe userLine id selected
+    selection = fromMaybe userLine selected
   in state {
     stateContext = selection:context,
     stateItems = difference items (fromList (words selection))
@@ -101,7 +101,7 @@ step state@(State _ context Logging) = do
   eitherInterval <- track
   either onTrackingError onInterval eitherInterval
   where nextStep = step state { stateStep = Prompt }
-        description = intercalate " " (reverse context)
+        description = unwords (reverse context)
         track :: IO (Either IOError (EpochTime, EpochTime))
         track = do
           printMessage (Started description)
@@ -124,7 +124,7 @@ step state@(State _ context Logging) = do
         floatFromInterval (t1, t2) =
           let convert = fromIntegral . fromEnum
               secondsPerHour = 3600
-          in (convert (t2 - t1)) / secondsPerHour
+          in convert (t2 - t1) / secondsPerHour
 
 defActivities :: [FilePath] -> [FilePath]
 defActivities [] = ["margin-tracker-activities"]
@@ -134,11 +134,10 @@ makeItems
   :: Either IOError [String]
   -> Set String
   -> Set String
-makeItems eitherContents marginSet =
-  union contentSet marginSet
+makeItems eitherContents = union contentSet
   where
     contentSet = fromList $ either (const []) parseContents eitherContents
-    parseContents cont = join $ lines <$> cont
+    parseContents cont = lines =<< cont
 
 data Options = Options {
   activityFiles :: [String],
@@ -163,7 +162,7 @@ main = do
       taken = take (fromMaybe 10 marginDescriptionLimit) parsed
   when verbose (showMargins parsed taken)
   let paths = defActivities activityFiles
-  eitherContents <- try $ sequence $ map readFile paths
+  eitherContents <- try $ mapM readFile paths
   let activities = makeItems eitherContents $ fromList taken
   trackingData <- step (State activities [] Prompt)
   mapM_ (addToMaybeFile marginFile) trackingData
@@ -174,11 +173,7 @@ main = do
       putStrLn "no activities will be taken by the file"
       pure $ Right []
     parseMargins margin =
-      sortOn length
-      $ nub
-      $ join
-      $ words . description
-      <$> margin
+      sortOn length $ nub ((words . description) =<< margin)
     showMargins parsed taken = do
-      putStrLn $ "parsed: " <> (show parsed)
-      putStrLn $ "taken:  " <> (show taken)
+      putStrLn $ "parsed: " <> show parsed
+      putStrLn $ "taken:  " <> show taken

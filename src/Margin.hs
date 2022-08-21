@@ -78,7 +78,7 @@ formatMarginFile margins path =
 getAllMargins :: [String] -> IO [Margin]
 getAllMargins paths = do
   eitherDecoded <- mapM parseMarginFile paths
-  mapM print (lefts eitherDecoded)
+  mapM_ print (lefts eitherDecoded)
   pure ((concat . rights) eitherDecoded)
 
 -- helper for command line scripts. Gets a list of paths and a

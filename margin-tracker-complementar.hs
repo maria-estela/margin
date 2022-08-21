@@ -40,8 +40,8 @@ showMessage (Enter complementar)
   | otherwise    = "enter to select an activity"
 showMessage (Added description) = "added "++description++" to margin file"
 showMessage (Elapsed h)
-  | h >= 1    = (show h)++" hours"
-  | otherwise = (show m)++" minutes"
+  | h >= 1    = show h <> " hours"
+  | otherwise = show m <> " minutes"
   where m = h*60
 showMessage (Started activity) = "started logging "++activity
 showMessage CancelTracking = "tracking discarded"
@@ -83,21 +83,21 @@ step state@(State items complementar logging) =
         printMessage CancelStep
         return Nothing
       onTrackingError :: IOError -> IO ()
-      onTrackingError _ = do
+      onTrackingError _ =
         printMessage CancelTracking
       onUser :: String -> IO (Maybe State)
       onUser userLine = 
-        let description = maybe userLine id (selected userLine)
+        let description = fromMaybe userLine (selected userLine)
             addItems newItems = union newItems (stateItems state)
             newItems = if active state then singleton description else empty
             newState = state {
-              stateItems = addItems (newItems),
+              stateItems = addItems newItems,
               stateLogging = not (stateLogging state) }
         in do
           eitherInterval <- track description
           either onTrackingError (onInterval description) eitherInterval
           step newState
-  in if (active state)
+  in if active state
      then (do
                printMessage (Enumerate items)
                eitherUser <- try getLine
@@ -132,7 +132,7 @@ loop f i = do
 main = do
   args <- getArgs
   let (paths, complementar) = parseArgs args
-      readItems = sequence (map readFile paths)
+      readItems = mapM readFile paths
     in (do
       contents <- try readItems
       let initial = State (makeItems contents) complementar True
