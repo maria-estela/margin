@@ -21,5 +21,5 @@ showStats fileName = do
 main = do
   args <- getArgs
   if null args
-    then showStats ("./" <> defaultFileName)
+    then showStats defaultFilePath
     else mapM_ showStats args

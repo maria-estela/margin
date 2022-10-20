@@ -1,7 +1,8 @@
-import Data.List( uncons, intersperse )
+import Data.List (uncons, intersperse)
+import Data.Maybe (fromMaybe)
 import System.IO
-import System.Environment( getArgs )
-import Text.Read( readMaybe )
+import System.Environment (getArgs)
+import Text.Read (readMaybe)
 import Margin
 import Options.Applicative
 import Data.Semigroup ((<>))

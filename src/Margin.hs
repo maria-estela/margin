@@ -2,7 +2,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Margin where
 
-import Control.Monad (when)
+import Control.Monad (when, void)
 import Data.Aeson(eitherDecode, FromJSON, ToJSON, eitherDecode, encode )
 import Data.ByteString.Lazy( readFile, writeFile )
 import Data.Either( rights, lefts, isRight)
@@ -21,7 +21,7 @@ import qualified Data.Time.ISO8601 as ISO8601
 import qualified Data.ByteString.Char8 as Char8
 import qualified Data.ByteString.Lazy as ByteString
 
-defaultFileName = "margin-data.json"
+defaultFilePath = "data.margin"
 
 data Margin = Margin {
   value :: Float,
@@ -113,19 +113,22 @@ applyToMargin path f = do
       pure (Right processed)
         where processed = f Nothing
 
-addMargin :: Margin -> Maybe [Margin] -> [Margin]
-addMargin newMargin maybeMargins = margins ++ [newMargin]
-  where margins = fromMaybe [] maybeMargins
+addMargins :: [Margin] -> Maybe [Margin] -> [Margin]
+addMargins newMargins maybeMargins = fromMaybe [] maybeMargins <> newMargins
 
 addToFile fileName (value, description) = do
   newMargin <- marginNow value description
-  applyToMargin fileName (addMargin newMargin)
+  applyToMargin fileName (addMargins [newMargin])
   pure ()
 
-addToDefaultFile = addToFile ("./" ++ defaultFileName)
+addToDefaultFile = addToFile defaultFilePath
 
 addToMaybeFile :: Maybe FilePath -> (Float, String) -> IO ()
 addToMaybeFile Nothing = addToDefaultFile
 addToMaybeFile (Just path) = addToFile path
 
-parseMaybeFile = parseMarginFile . fromMaybe defaultFileName
+addMarginsToMaybeFile :: [Margin] -> Maybe FilePath -> IO ()
+addMarginsToMaybeFile margins maybeFilePath = void $
+  applyToMargin (fromMaybe defaultFilePath maybeFilePath) (addMargins margins)
+
+parseMaybeFile = parseMarginFile . fromMaybe defaultFilePath

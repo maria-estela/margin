@@ -13,12 +13,12 @@ maintainer:          f.occhipinti@gmail.com
 -- category:            
 build-type:          Simple
 extra-source-files:  README.md
-cabal-version:       >=1.10
+cabal-version:       >=2.0
 
 executable margin-add
  main-is: margin-add.hs
  build-depends:       base,
-                      time,
+                      time ^>= 1.9.1,
                       aeson,
                       cassava,
                       iso8601-time,
@@ -27,33 +27,20 @@ executable margin-add
                       optparse-applicative,
                       margin
 
-executable margin-tracker-complementar
- main-is: margin-tracker-complementar.hs
- build-depends:       base,
-                      unix,
-                      aeson,
-                      cassava,
-                      iso8601-time,
-                      vector,
-                      bytestring,
-                      optparse-applicative,
-                      containers,
-                      margin,
-                      safe
-
 executable margin-tracker
  main-is: margin-tracker.hs
- build-depends:       base,
-                      unix,
-                      aeson,
-                      cassava,
-                      iso8601-time,
-                      vector,
+ build-depends:       aeson,
+                      base,
                       bytestring,
-                      optparse-applicative,
+                      cassava,
                       containers,
+                      iso8601-time,
                       margin,
-                      safe
+                      optparse-applicative,
+                      safe,
+                      time,
+                      unix,
+                      vector
 
 executable margin-stats
  main-is: margin-stats.hs

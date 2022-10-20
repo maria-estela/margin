@@ -1,16 +1,10 @@
 {-# LANGUAGE RecordWildCards #-}
 
-import Margin
-import System.Posix.Time
-import System.Posix.Types
-import System.Environment (getArgs)
-import Control.Monad (join, sequence, when)
-import System.IO.Error ()
 import Control.Exception (try)
-import Text.Read (readMaybe)
-import Safe (atMay)
+import Control.Monad (join, sequence, when)
 import Data.List (partition, intercalate, sortOn, nub)
 import Data.Maybe (fromMaybe)
+import Data.Semigroup ((<>))
 import Data.Set (
   Set (..),
   fromList,
@@ -18,8 +12,15 @@ import Data.Set (
   toList,
   difference,
   union)
+import Data.Time.Clock
+import Margin
 import Options.Applicative
-import Data.Semigroup ((<>))
+import Safe (atMay)
+import System.Environment (getArgs)
+import System.IO.Error ()
+import System.Posix.Time
+import System.Posix.Types
+import Text.Read (readMaybe)
 
 selectionList :: Set String -> [String]
 selectionList = sortOn length . toList
@@ -85,9 +86,7 @@ updateState (Deepen userLine) state@(State items context Prompt) =
     stateItems = difference items (fromList (words selection))
     }
 
-type MarginData = (Float, String)
-
-step :: State -> IO [MarginData]
+step :: State -> IO [Margin]
 
 step state@(State _ context Prompt) = do
   printMessage (Enumerate state)
@@ -102,29 +101,28 @@ step state@(State _ context Logging) = do
   either onTrackingError onInterval eitherInterval
   where nextStep = step state { stateStep = Prompt }
         description = unwords (reverse context)
-        track :: IO (Either IOError (EpochTime, EpochTime))
+        track :: IO (Either IOError (UTCTime, UTCTime))
         track = do
           printMessage (Started description)
-          t1 <- epochTime
+          t1 <- getCurrentTime
           eitherEnter <- try getLine
-          t2 <- epochTime
-          return (fmap (const (t1, t2)) eitherEnter)
-        onInterval :: (EpochTime, EpochTime) -> IO [MarginData]
-        onInterval interval =
-          let hours = floatFromInterval interval
+          t2 <- getCurrentTime
+          pure $ (t1, t2) <$ eitherEnter
+        onInterval :: (UTCTime, UTCTime) -> IO [Margin]
+        onInterval (start, stop) =
+          let
+            fixToFloat = fromRational . toRational
+            seconds = fixToFloat $ nominalDiffTimeToSeconds $
+                      stop `diffUTCTime` start
+            hours = seconds / 3600
           in do
             printMessage (Elapsed hours)
             nextData <- nextStep
-            pure ((hours, description) : nextData)
-        onTrackingError :: IOError -> IO [MarginData]
+            pure (Margin hours description start : nextData)
+        onTrackingError :: IOError -> IO [Margin]
         onTrackingError _ = do
           printMessage CancelTracking
           nextStep
-        floatFromInterval :: (EpochTime, EpochTime) -> Float
-        floatFromInterval (t1, t2) =
-          let convert = fromIntegral . fromEnum
-              secondsPerHour = 3600
-          in convert (t2 - t1) / secondsPerHour
 
 defActivities :: [FilePath] -> [FilePath]
 defActivities [] = ["margin-tracker-activities"]
@@ -164,8 +162,8 @@ main = do
   let paths = defActivities activityFiles
   eitherContents <- try $ mapM readFile paths
   let activities = makeItems eitherContents $ fromList taken
-  trackingData <- step (State activities [] Prompt)
-  mapM_ (addToMaybeFile marginFile) trackingData
+  margins <- step (State activities [] Prompt)
+  addMarginsToMaybeFile margins marginFile
 
   where
     explainParsing error = do
