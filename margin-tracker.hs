@@ -1,8 +1,9 @@
 {-# LANGUAGE RecordWildCards #-}
 
-import Control.Exception (try)
+import Control.Exception (try, Exception)
 import Control.Monad (join, sequence, when)
-import Data.List (partition, intercalate, sortOn, nub)
+import Data.Bool (bool)
+import Data.List (partition, intercalate, sortOn, nub, (\\))
 import Data.Maybe (fromMaybe)
 import Data.Semigroup ((<>))
 import Data.Set (
@@ -22,21 +23,41 @@ import System.Posix.Time
 import System.Posix.Types
 import Text.Read (readMaybe)
 
-selectionList :: Set String -> [String]
-selectionList = sortOn length . toList
+-- activities start
 
-enumerate :: Set String -> [(Int, String)]
-enumerate = zip [0..] . selectionList
+newtype Activities = Activities { strings :: [String] }
+data Access = Shorter | Chronological deriving Eq
+
+makeActivities :: Access -> [String] -> [String] -> Activities
+makeActivities _ defaults = Activities . (<> defaults)
+
+activityList :: Access -> Activities -> [String]
+activityList Shorter = sortOn length . strings
+activityList Chronological = reverse . strings
+
+enumerate :: Access -> Activities -> [(Int, String)]
+enumerate Shorter =
+  zip [0..] . activityList Shorter
+enumerate Chronological =
+  reverse . zip [0..] . activityList Chronological
+
+append :: [String] -> Activities -> Activities
+append new activities = Activities $ strings activities <> new
+
+consume :: [String] -> Activities -> Activities
+consume consumed activities = Activities $ strings activities \\ consumed
+
+-- activities end
 
 data StepState = Logging | Prompt
 
 data State = State {
-  stateItems   :: Set String,
+  stateActivities :: Activities,
   stateContext :: [String],
   stateStep :: StepState
   }
 
-data Message = Enumerate State
+data Message = Enumerate Access State
              | Paused
              | Added String
              | Elapsed Float
@@ -45,9 +66,10 @@ data Message = Enumerate State
              | QuitMessage
 
 showMessage :: Message -> String
-showMessage (Enumerate state) = show (enumerate (stateItems state))
-                                ++ "\n"
-                                ++ intercalate " > " (reverse (stateContext state))
+showMessage (Enumerate access state) =
+  show (enumerate access $ stateActivities state)
+  <> "\n"
+  <> intercalate " > " (reverse $ stateContext state)
 showMessage Paused = "paused. enter to select an activity"
 showMessage (Added description) = "added "++description++" to margin file"
 showMessage (Elapsed h)
@@ -61,45 +83,45 @@ showMessage QuitMessage     = "quitting context"
 printMessage :: Message -> IO ()
 printMessage = putStrLn . showMessage
 
-data Command = Quit | Deepen String | Continue deriving Eq
+data Command = Quit | Deepen Access String | Continue deriving Eq
 
-interpretCommand :: Either IOError String -> Command
-interpretCommand (Left _)   = Quit
-interpretCommand (Right "") = Continue
-interpretCommand (Right s)  = Deepen s
+interpretCommand :: Access -> Either IOError String -> Command
+interpretCommand _ (Left _) = Quit
+interpretCommand _ (Right "") = Continue
+interpretCommand access (Right s) = Deepen access s
 
 -- @updateState@ is used only on @Prompt@ states
 updateState :: Command -> State -> State
-updateState Quit state@(State items context Prompt) =
+updateState Quit state@(State activities context Prompt) =
   state {
     stateContext = tail context,
-    stateItems = items `union` fromList (words (head context))
+    stateActivities = append (words (head context)) activities
     }
 updateState Continue state = state { stateStep = Logging }
-updateState (Deepen userLine) state@(State items context Prompt) =
+updateState (Deepen access userLine) state@(State activities context Prompt) =
   let
     selected :: Maybe String
-    selected = readMaybe userLine >>= atMay (selectionList items)
+    selected = readMaybe userLine >>= atMay (activityList access activities)
     selection = fromMaybe userLine selected
   in state {
     stateContext = selection:context,
-    stateItems = difference items (fromList (words selection))
+    stateActivities = consume (words selection) activities
     }
 
-step :: State -> IO [Margin]
+step :: Access -> State -> IO [Margin]
 
-step state@(State _ context Prompt) = do
-  printMessage (Enumerate state)
+step access state@(State _ context Prompt) = do
+  printMessage (Enumerate access state)
   userLine <- try getLine
-  let command = interpretCommand userLine
+  let command = interpretCommand access userLine
   if command == Quit && null context
     then return []
-    else step (updateState command state)
+    else step access (updateState command state)
 
-step state@(State _ context Logging) = do
+step access state@(State _ context Logging) = do
   eitherInterval <- track
   either onTrackingError onInterval eitherInterval
-  where nextStep = step state { stateStep = Prompt }
+  where nextStep = step access state { stateStep = Prompt }
         description = unwords (reverse context)
         track :: IO (Either IOError (UTCTime, UTCTime))
         track = do
@@ -128,20 +150,12 @@ defActivities :: [FilePath] -> [FilePath]
 defActivities [] = ["margin-tracker-activities"]
 defActivities o  = o
 
-makeItems
-  :: Either IOError [String]
-  -> Set String
-  -> Set String
-makeItems eitherContents = union contentSet
-  where
-    contentSet = fromList $ either (const []) parseContents eitherContents
-    parseContents cont = lines =<< cont
-
 data Options = Options {
   activityFiles :: [String],
   marginFile :: Maybe String,
   marginDescriptionLimit :: Maybe Int,
-  verbose :: Bool
+  verbose :: Bool,
+  short :: Bool
   }
 
 options :: Parser Options
@@ -150,6 +164,7 @@ options = Options
           <*> optional (strOption (long "margin-data"))
           <*> optional (option auto (long "margin-description-limit"))
           <*> switch (long "verbose")
+          <*> switch (long "access-short-first")
 
 main :: IO ()
 main = do
@@ -157,12 +172,19 @@ main = do
   eitherEitherMargin <- try $ parseMaybeFile marginFile
   eitherMargin <- either explainParsing pure eitherEitherMargin
   let parsed = parseMargins $ either (const []) id eitherMargin
-      taken = take (fromMaybe 10 marginDescriptionLimit) parsed
+      taken = take (fromMaybe 2000 marginDescriptionLimit) parsed
+      access = bool Chronological Shorter short
   when verbose (showMargins parsed taken)
-  let paths = defActivities activityFiles
-  eitherContents <- try $ mapM readFile paths
-  let activities = makeItems eitherContents $ fromList taken
-  margins <- step (State activities [] Prompt)
+  let
+    paths = defActivities activityFiles
+    readDefaults = mapM readFile paths
+    tryIO :: IO a -> IO (Either IOError a)
+    tryIO = try
+    emptyDefaults = fmap (either (const []) id) . tryIO
+  defaultActivities <- emptyDefaults readDefaults
+  let
+    activities = makeActivities access (foldMap lines defaultActivities) taken
+  margins <- step access (State activities [] Prompt)
   addMarginsToMaybeFile margins marginFile
 
   where
@@ -170,8 +192,7 @@ main = do
       print (error :: IOError)
       putStrLn "no activities will be taken by the file"
       pure $ Right []
-    parseMargins margin =
-      sortOn length $ nub ((words . description) =<< margin)
+    parseMargins margin = nub ((words . description) =<< margin)
     showMargins parsed taken = do
       putStrLn $ "parsed: " <> show parsed
       putStrLn $ "taken:  " <> show taken
