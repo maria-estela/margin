@@ -65,23 +65,26 @@ data Message = Enumerate Access State
              | CancelTracking
              | QuitMessage
 
-showMessage :: Message -> String
-showMessage (Enumerate access state) =
-  show (enumerate access $ stateActivities state)
-  <> "\n"
-  <> intercalate " > " (reverse $ stateContext state)
-showMessage Paused = "paused. enter to select an activity"
-showMessage (Added description) = "added "++description++" to margin file"
-showMessage (Elapsed h)
-  | h >= 1    = show h <> " hours"
-  | otherwise = show m <> " minutes"
-  where m = h*60
-showMessage (Started activity) = "started logging "++activity
-showMessage CancelTracking = "tracking discarded"
-showMessage QuitMessage     = "quitting context"
+instance Show Message where
+  show (Enumerate access state) =
+    let enumerated :: (Int, String) -> String
+        enumerated (i, s) = s <> " · " <> show i
+        activities = intercalate ",  " $ fmap enumerated $ enumerate access
+                   $ stateActivities state
+        context = intercalate " > " (reverse $ stateContext state)
+    in activities <> "\n" <> context
+  show Paused = "paused. enter to select an activity"
+  show (Added description) = "added " <> description <> " to margin file"
+  show (Elapsed h)
+    | h >= 1    = show h <> " hours"
+    | otherwise = show m <> " minutes"
+    where m = h * 60
+  show (Started activity) = "started logging "++activity
+  show CancelTracking = "tracking discarded"
+  show QuitMessage     = "quitting context"
 
 printMessage :: Message -> IO ()
-printMessage = putStrLn . showMessage
+printMessage = putStrLn . show
 
 data Command = Quit | Deepen Access String | Continue deriving Eq
 
