@@ -58,7 +58,6 @@ data State = State {
   }
 
 data Message = Enumerate Access State
-             | Paused
              | Added String
              | Elapsed Float
              | Started String
@@ -73,15 +72,14 @@ instance Show Message where
                    $ stateActivities state
         context = intercalate " > " (reverse $ stateContext state)
     in activities <> "\n" <> context
-  show Paused = "paused. enter to select an activity"
   show (Added description) = "added " <> description <> " to margin file"
   show (Elapsed h)
     | h >= 1    = show h <> " hours"
     | otherwise = show m <> " minutes"
     where m = h * 60
-  show (Started activity) = "started logging "++activity
+  show (Started activity) = "⏳ started logging " <> activity
   show CancelTracking = "tracking discarded"
-  show QuitMessage     = "quitting context"
+  show QuitMessage = "quitting context"
 
 printMessage :: Message -> IO ()
 printMessage = putStrLn . show
