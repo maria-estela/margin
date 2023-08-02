@@ -162,7 +162,7 @@ data Options = Options {
 options :: Parser Options
 options = Options
           <$> many (strOption (long "activities"))
-          <*> optional (strOption (long "margin-data"))
+          <*> optional (argument str (metavar "FILE.margin"))
           <*> optional (option auto (long "margin-description-limit"))
           <*> switch (long "verbose")
           <*> switch (long "access-short-first")
