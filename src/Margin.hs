@@ -2,7 +2,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Margin where
 
-import Control.Monad (when, void)
+import Control.Monad (when, void, join)
 import Data.Aeson(eitherDecode, FromJSON, ToJSON, eitherDecode, encode )
 import Data.ByteString.Lazy( readFile, writeFile )
 import Data.Either( rights, lefts, isRight)
@@ -59,6 +59,7 @@ instance Csv.DefaultOrdered Margin where
 
 parseMarginFile :: FilePath -> IO (Either String [Margin])
 parseMarginFile path = do
+  putStrLn ("reading file " <> path)
   contents <- Data.ByteString.Lazy.readFile path
   case Csv.decodeByName contents of
     Right (_, margins) -> pure $ Right $ Vector.toList margins
@@ -67,6 +68,14 @@ parseMarginFile path = do
       let eitherDecoded = eitherDecode contents
       when (isRight eitherDecoded) (putStrLn "this JSON margin format is deprecated")
       pure eitherDecoded
+
+handledPure
+  :: ([Margin] -> a) -> FilePath -> Either String [Margin] -> IO (Maybe a)
+handledPure f p = either h (pure . Just . f)
+  where h e = putStrLn (p `l` e) >> pure Nothing
+
+handledParse :: ([Margin] -> a) -> FilePath -> IO (Maybe a)
+handledParse f = (>>=) <$> parseMarginFile <*> handledPure f
 
 formatMarginContents :: [Margin] -> ByteString.ByteString
 formatMarginContents = Csv.encodeDefaultOrderedByName
@@ -87,6 +96,26 @@ getAllMargins paths = do
 onAllMargins paths fun = do
   margins <- getAllMargins paths
   (putStr . fun) margins
+
+catMaybes
+  :: (Applicative t, Monoid (t a), Foldable t)
+  => t (Maybe a) -> t a
+catMaybes = foldr ((<>) . maybe mempty pure) mempty
+
+mapMaybe
+  :: (Traversable t, Applicative t, Applicative f, Monoid (t b), Monoid (t a))
+  => (a -> f (Maybe b)) -> t a -> f (t b)
+mapMaybe g = fmap catMaybes . traverse g
+
+defaultMany :: (Foldable f, Applicative f) => a -> f a -> f a
+defaultMany d m = if null m then pure d else m
+
+onAllMargins'
+  :: ([Margin] -> a) -> [FilePath] -> IO [a]
+onAllMargins' g = mapMaybe (handledParse g) . defaultMany defaultFilePath
+
+l :: Show s => String -> s -> String
+l a b = a <> ": " <> show b
 
 marginNow :: Float -> String -> IO Margin
 marginNow value description = Margin value description <$> getCurrentTime

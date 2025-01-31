@@ -47,10 +47,12 @@ executable margin-stats
  build-depends: base,
                 aeson,
                 cassava,
+                containers,
                 vector,
                 iso8601-time,
                 bytestring,
-                margin
+                margin,
+                optparse-applicative
 
 executable margin-merge
  main-is: margin-merge.hs
