@@ -39,15 +39,15 @@ format A {count, real, overlapping, attribution} =
   let
     e = toAscList attribution
     fe (label, float) =
-      (uncurry etc . splitAt 4 . show) float <> " " <> label
+      let f = uncurry etc . splitAt 4 . show
+      in unwords [f (float/real), f float, label]
     etc :: [Char] -> [Char] -> [Char]
     etc c [] = c <> " "
     etc c _  = c <> "_"
     footer = intercalate ", " [
       "real" `l` real,
-        "average" `l` (real / fromIntegral count),
-        "overlap" `l` (overlapping/real - 1) <> "%"
-      ]
+      "average" `l` (real / fromIntegral count),
+      "overlap" `l` (overlapping/real - 1) <> "%"]
   in unlines $ (fmap fe . sortOn snd $ e) <> ["\n", footer]
 
 a :: Margin -> Accum [(String, Float)]
