@@ -193,7 +193,9 @@ main = do
       print (error :: IOError)
       putStrLn "no activities will be taken by the file"
       pure $ Right []
-    parseMargins margin = nub ((words . description) =<< margin)
+    fromEnd f = reverse . f . reverse
+    recentLast = fromEnd nub
+    parseMargins margin = recentLast ((words . description) =<< margin)
     showMargins parsed taken = do
       putStrLn $ "parsed: " <> show parsed
       putStrLn $ "taken:  " <> show taken
