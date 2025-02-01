@@ -39,8 +39,10 @@ format A {count, real, overlapping, attribution} =
   let
     e = toAscList attribution
     fe (label, float) =
-      let f = uncurry etc . splitAt 4 . show
-      in unwords [f (float/real), f float, label]
+      let s f
+            | f < 0.1 = "<0.1 " -- exponential notation starts from e^-2
+            | otherwise = uncurry etc . splitAt 4 . show $ f
+      in unwords [s (float/real), s float, label]
     etc :: [Char] -> [Char] -> [Char]
     etc c [] = c <> " "
     etc c _  = c <> "_"
