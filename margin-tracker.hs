@@ -54,8 +54,11 @@ data StepState = Logging | Prompt
 data State = State {
   stateActivities :: Activities,
   stateContext :: [String],
-  stateStep :: StepState
+  stateStep :: StepState,
+  stateSession :: Float
   }
+
+overStateSession f s = s { stateSession = f (stateSession s) }
 
 data Message = Enumerate Access State
              | Added String
@@ -81,9 +84,6 @@ instance Show Message where
   show CancelTracking = "tracking discarded"
   show QuitMessage = "quitting context"
 
-printMessage :: Message -> IO ()
-printMessage = putStrLn . show
-
 data Command = Quit | Deepen Access String | Continue deriving Eq
 
 interpretCommand :: Access -> Either IOError String -> Command
@@ -93,13 +93,13 @@ interpretCommand access (Right s) = Deepen access s
 
 -- @updateState@ is used only on @Prompt@ states
 updateState :: Command -> State -> State
-updateState Quit state@(State activities context Prompt) =
+updateState Quit state@(State activities context Prompt _) =
   state {
     stateContext = tail context,
     stateActivities = append (words (head context)) activities
     }
 updateState Continue state = state { stateStep = Logging }
-updateState (Deepen access userLine) state@(State activities context Prompt) =
+updateState (Deepen access userLine) state@(State activities context Prompt _) =
   let
     selected :: Maybe String
     selected = readMaybe userLine >>= atMay (activityList access activities)
@@ -109,29 +109,29 @@ updateState (Deepen access userLine) state@(State activities context Prompt) =
     stateActivities = consume (words selection) activities
     }
 
-step :: Access -> State -> IO [Margin]
+step :: Access -> State -> IO ([Margin], State)
 
-step access state@(State _ context Prompt) = do
-  printMessage (Enumerate access state)
+step access state@(State _ context Prompt _) = do
+  print (Enumerate access state)
   userLine <- try getLine
   let command = interpretCommand access userLine
   if command == Quit && null context
-    then return []
+    then return ([], state)
     else step access (updateState command state)
 
-step access state@(State _ context Logging) = do
+step access state@(State _ context Logging _) = do
   eitherInterval <- track
   either onTrackingError onInterval eitherInterval
   where nextStep = step access state { stateStep = Prompt }
         description = unwords (reverse context)
         track :: IO (Either IOError (UTCTime, UTCTime))
         track = do
-          printMessage (Started description)
+          print (Started description)
           t1 <- getCurrentTime
           eitherEnter <- try getLine
           t2 <- getCurrentTime
           pure $ (t1, t2) <$ eitherEnter
-        onInterval :: (UTCTime, UTCTime) -> IO [Margin]
+        onInterval :: (UTCTime, UTCTime) -> IO ([Margin], State)
         onInterval (start, stop) =
           let
             fixToFloat = fromRational . toRational
@@ -139,12 +139,14 @@ step access state@(State _ context Logging) = do
                       stop `diffUTCTime` start
             hours = seconds / 3600
           in do
-            printMessage (Elapsed hours)
-            nextData <- nextStep
-            pure (Margin hours description start : nextData)
-        onTrackingError :: IOError -> IO [Margin]
+            print (Elapsed hours)
+            (nextData, nextState) <- nextStep
+            pure (
+              Margin hours description start : nextData,
+              overStateSession (+hours) nextState)
+        onTrackingError :: IOError -> IO ([Margin], State)
         onTrackingError _ = do
-          printMessage CancelTracking
+          print CancelTracking
           nextStep
 
 defActivities :: [FilePath] -> [FilePath]
@@ -185,8 +187,9 @@ main = do
   defaultActivities <- emptyDefaults readDefaults
   let
     activities = makeActivities access (foldMap lines defaultActivities) taken
-  margins <- step access (State activities [] Prompt)
-  addMarginsToMaybeFile margins marginFile
+  (m, s) <- step access (State activities [] Prompt 0)
+  addMarginsToMaybeFile m marginFile
+  print . Elapsed . stateSession $ s
 
   where
     explainParsing error = do
