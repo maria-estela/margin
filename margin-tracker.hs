@@ -54,11 +54,8 @@ data StepState = Logging | Prompt
 data State = State {
   stateActivities :: Activities,
   stateContext :: [String],
-  stateStep :: StepState,
-  stateSession :: Float
+  stateStep :: StepState
   }
-
-overStateSession f s = s { stateSession = f (stateSession s) }
 
 data Message = Enumerate Access State
              | Added String
@@ -93,13 +90,13 @@ interpretCommand access (Right s) = Deepen access s
 
 -- @updateState@ is used only on @Prompt@ states
 updateState :: Command -> State -> State
-updateState Quit state@(State activities context Prompt _) =
+updateState Quit state@(State activities context Prompt) =
   state {
     stateContext = tail context,
     stateActivities = append (words (head context)) activities
     }
 updateState Continue state = state { stateStep = Logging }
-updateState (Deepen access userLine) state@(State activities context Prompt _) =
+updateState (Deepen access userLine) state@(State activities context Prompt) =
   let
     selected :: Maybe String
     selected = readMaybe userLine >>= atMay (activityList access activities)
@@ -109,17 +106,17 @@ updateState (Deepen access userLine) state@(State activities context Prompt _) =
     stateActivities = consume (words selection) activities
     }
 
-step :: Access -> State -> IO ([Margin], State)
+step :: Access -> State -> IO [Margin]
 
-step access state@(State _ context Prompt _) = do
+step access state@(State _ context Prompt) = do
   print (Enumerate access state)
   userLine <- try getLine
   let command = interpretCommand access userLine
   if command == Quit && null context
-    then return ([], state)
+    then return []
     else step access (updateState command state)
 
-step access state@(State _ context Logging _) = do
+step access state@(State _ context Logging) = do
   eitherInterval <- track
   either onTrackingError onInterval eitherInterval
   where nextStep = step access state { stateStep = Prompt }
@@ -131,7 +128,7 @@ step access state@(State _ context Logging _) = do
           eitherEnter <- try getLine
           t2 <- getCurrentTime
           pure $ (t1, t2) <$ eitherEnter
-        onInterval :: (UTCTime, UTCTime) -> IO ([Margin], State)
+        onInterval :: (UTCTime, UTCTime) -> IO [Margin]
         onInterval (start, stop) =
           let
             fixToFloat = fromRational . toRational
@@ -140,11 +137,9 @@ step access state@(State _ context Logging _) = do
             hours = seconds / 3600
           in do
             print (Elapsed hours)
-            (nextData, nextState) <- nextStep
-            pure (
-              Margin hours description start : nextData,
-              overStateSession (+hours) nextState)
-        onTrackingError :: IOError -> IO ([Margin], State)
+            nextData <- nextStep
+            pure $ Margin hours description start : nextData
+        onTrackingError :: IOError -> IO [Margin]
         onTrackingError _ = do
           print CancelTracking
           nextStep
@@ -187,9 +182,9 @@ main = do
   defaultActivities <- emptyDefaults readDefaults
   let
     activities = makeActivities access (foldMap lines defaultActivities) taken
-  (m, s) <- step access (State activities [] Prompt 0)
+  m <- step access (State activities [] Prompt)
   addMarginsToMaybeFile m marginFile
-  print . Elapsed . stateSession $ s
+  print . Elapsed . sum . fmap Margin.value $ m
 
   where
     explainParsing error = do
