@@ -57,8 +57,10 @@ a m = A { count=1, real=v, overlapping=v*l, attribution=attributed }
   where
     v = Margin.value m
     l = fromIntegral . length $ attributed
+    b [] = ["<empty>"]
+    b w = w
     attributed :: [(String, Float)]
-    attributed = fmap (, v) . words . Margin.description $ m
+    attributed = fmap (, v) . b . words . Margin.description $ m
 
 s =
   fmap (fromListWith (+)) .
