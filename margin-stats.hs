@@ -32,7 +32,7 @@ instance Functor Accum where
 newtype Options = Options { targets :: [String] }
 
 options :: Parser Options
-options = Options <$> many (strOption (long "target"))
+options = Options <$> many (strOption (short 'f'))
 
 format :: Accum (Map String Float) -> String
 format A {count, real, overlapping, attribution} =
