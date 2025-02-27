@@ -25,27 +25,42 @@ import Text.Read (readMaybe)
 
 -- activities start
 
-newtype Activities = Activities { strings :: [String] }
 data Access = Shorter | Chronological deriving Eq
 
-makeActivities :: Access -> [String] -> [String] -> Activities
-makeActivities _ defaults = Activities . (<> defaults)
+data Activities = Activities {
+  strings :: [String] ,
+  access :: Access }
 
-activityList :: Access -> Activities -> [String]
-activityList Shorter = sortOn length . strings
-activityList Chronological = reverse . strings
+makeActivities
+  :: Access
+  -> [String]
+  -- ^ Defaults
+  -> [String]
+  -- ^ Additional
+  -> Activities
+makeActivities a d t = Activities (t <> d) a
 
-enumerate :: Access -> Activities -> [(Int, String)]
-enumerate Shorter =
-  zip [0..] . activityList Shorter
-enumerate Chronological =
-  reverse . zip [0..] . activityList Chronological
+activityList :: Activities -> [String]
+activityList a =
+  let f = case access a of
+        Shorter -> sortOn length
+        Chronological -> reverse
+  in f . strings $ a
+
+enumerate :: Activities -> [(Int, String)]
+enumerate a =
+  let f = case access a of
+        Shorter -> id
+        Chronological -> reverse
+  in f . zip [0..] . activityList $ a
+
+overStrings f a = a { strings = f . strings $ a }
 
 append :: [String] -> Activities -> Activities
-append new activities = Activities $ strings activities <> new
+append new = overStrings (<> new)
 
 consume :: [String] -> Activities -> Activities
-consume consumed activities = Activities $ strings activities \\ consumed
+consume consumed  = overStrings (\\ consumed)
 
 -- activities end
 
@@ -57,7 +72,9 @@ data State = State {
   stateStep :: StepState
   }
 
-data Message = Enumerate Access State
+overStep f s = s { stateStep = f . stateStep $ s }
+
+data Message = Enumerate State
              | Added String
              | Elapsed Float
              | Started String
@@ -65,11 +82,14 @@ data Message = Enumerate Access State
              | QuitMessage
 
 instance Show Message where
-  show (Enumerate access state) =
+  show (Enumerate state) =
     let enumerated :: (Int, String) -> String
         enumerated (i, s) = s <> " · " <> show i
-        activities = intercalate ",  " $ fmap enumerated $ enumerate access
-                   $ stateActivities state
+        activities = intercalate ",  "
+          . fmap enumerated
+          . enumerate
+          . stateActivities
+          $ state
         context = intercalate " > " (reverse $ stateContext state)
     in activities <> "\n" <> context
   show (Added description) = "added " <> description <> " to margin file"
@@ -81,15 +101,12 @@ instance Show Message where
   show CancelTracking = "tracking discarded"
   show QuitMessage = "quitting context"
 
-printMessage :: Message -> IO ()
-printMessage = putStrLn . show
+data Command = Quit | Deepen String | Continue deriving Eq
 
-data Command = Quit | Deepen Access String | Continue deriving Eq
-
-interpretCommand :: Access -> Either IOError String -> Command
-interpretCommand _ (Left _) = Quit
-interpretCommand _ (Right "") = Continue
-interpretCommand access (Right s) = Deepen access s
+interpretCommand :: Either IOError String -> Command
+interpretCommand (Left _) = Quit
+interpretCommand (Right "") = Continue
+interpretCommand (Right s) = Deepen s
 
 -- @updateState@ is used only on @Prompt@ states
 updateState :: Command -> State -> State
@@ -99,34 +116,34 @@ updateState Quit state@(State activities context Prompt) =
     stateActivities = append (words (head context)) activities
     }
 updateState Continue state = state { stateStep = Logging }
-updateState (Deepen access userLine) state@(State activities context Prompt) =
+updateState (Deepen userLine) state@(State activities context Prompt) =
   let
     selected :: Maybe String
-    selected = readMaybe userLine >>= atMay (activityList access activities)
+    selected = readMaybe userLine >>= atMay (activityList activities)
     selection = fromMaybe userLine selected
   in state {
     stateContext = selection:context,
     stateActivities = consume (words selection) activities
     }
 
-step :: Access -> State -> IO [Margin]
+step :: State -> IO [Margin]
 
-step access state@(State _ context Prompt) = do
-  printMessage (Enumerate access state)
+step state@(State _ context Prompt) = do
+  print (Enumerate state)
   userLine <- try getLine
-  let command = interpretCommand access userLine
+  let command = interpretCommand userLine
   if command == Quit && null context
     then return []
-    else step access (updateState command state)
+    else step (updateState command state)
 
-step access state@(State _ context Logging) = do
+step state@(State _ context Logging) = do
   eitherInterval <- track
   either onTrackingError onInterval eitherInterval
-  where nextStep = step access state { stateStep = Prompt }
+  where nextStep = step state { stateStep = Prompt }
         description = unwords (reverse context)
         track :: IO (Either IOError (UTCTime, UTCTime))
         track = do
-          printMessage (Started description)
+          print (Started description)
           t1 <- getCurrentTime
           eitherEnter <- try getLine
           t2 <- getCurrentTime
@@ -139,12 +156,12 @@ step access state@(State _ context Logging) = do
                       stop `diffUTCTime` start
             hours = seconds / 3600
           in do
-            printMessage (Elapsed hours)
+            print (Elapsed hours)
             nextData <- nextStep
-            pure (Margin hours description start : nextData)
+            pure $ Margin hours description start : nextData
         onTrackingError :: IOError -> IO [Margin]
         onTrackingError _ = do
-          printMessage CancelTracking
+          print CancelTracking
           nextStep
 
 defActivities :: [FilePath] -> [FilePath]
@@ -185,15 +202,18 @@ main = do
   defaultActivities <- emptyDefaults readDefaults
   let
     activities = makeActivities access (foldMap lines defaultActivities) taken
-  margins <- step access (State activities [] Prompt)
-  addMarginsToMaybeFile margins marginFile
+  m <- step (State activities [] Prompt)
+  addMarginsToMaybeFile m marginFile
+  print . Elapsed . sum . fmap Margin.value $ m
 
   where
     explainParsing error = do
       print (error :: IOError)
       putStrLn "no activities will be taken by the file"
       pure $ Right []
-    parseMargins margin = nub ((words . description) =<< margin)
+    fromEnd f = reverse . f . reverse
+    recentLast = fromEnd nub
+    parseMargins margin = recentLast ((words . description) =<< margin)
     showMargins parsed taken = do
       putStrLn $ "parsed: " <> show parsed
       putStrLn $ "taken:  " <> show taken
